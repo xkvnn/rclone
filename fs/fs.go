@@ -2,6 +2,7 @@
 package fs
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -130,6 +131,29 @@ type Option struct {
 	IsPassword bool             // set if the option is a password
 	NoPrefix   bool             // set if the option for this should not use the backend prefix
 	Advanced   bool             // set if this is an advanced config option
+}
+
+// BaseOption is an alias for Option used internally
+type BaseOption Option
+
+// MarshalJSON turns an Option into JSON
+//
+// It adds some generated fields for ease of use
+// - DefaultStr - a string rendering of Default
+// - ValueStr - a string rendering of Value
+// - Type - the type of the option
+func (o *Option) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		BaseOption
+		DefaultStr string
+		ValueStr   string
+		Type       string
+	}{
+		BaseOption: BaseOption(*o),
+		DefaultStr: fmt.Sprint(o.Default),
+		ValueStr:   o.String(),
+		Type:       o.Type(),
+	})
 }
 
 // GetValue gets the current current value which is the default if not set
@@ -592,6 +616,26 @@ func (ft *Features) List() (out []string) {
 		out = append(out, vType.Field(i).Name)
 	}
 	return out
+}
+
+// Enabled returns a map of features with keys showing whether they
+// are enabled or not
+func (ft *Features) Enabled() (features map[string]bool) {
+	v := reflect.ValueOf(ft).Elem()
+	vType := v.Type()
+	features = make(map[string]bool, v.NumField())
+	for i := 0; i < v.NumField(); i++ {
+		vName := vType.Field(i).Name
+		field := v.Field(i)
+		if field.Kind() == reflect.Func {
+			// Can't compare functions
+			features[vName] = !field.IsNil()
+		} else {
+			zero := reflect.Zero(field.Type())
+			features[vName] = field.Interface() != zero.Interface()
+		}
+	}
+	return features
 }
 
 // DisableList nil's out the comma separated list of named features.

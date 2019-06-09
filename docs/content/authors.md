@@ -258,3 +258,6 @@ Contributors
   * didil <1284255+didil@users.noreply.github.com>
   * id01 <gaviniboom@gmail.com>
   * Robert Marko <robimarko@gmail.com>
+  * Philip Harvey <32467456+pharveybattelle@users.noreply.github.com>
+  * JorisE <JorisE@users.noreply.github.com>
+  * garry415 <garry.415@gmail.com>
