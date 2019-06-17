@@ -2,6 +2,7 @@
 package ftp
 
 import (
+	"crypto/tls"
 	"io"
 	"net/textproto"
 	"os"
@@ -47,9 +48,18 @@ func init() {
 				IsPassword: true,
 				Required:   true,
 			}, {
+				Name:    "tls",
+				Help:    "Use FTP over TLS (Implicit)",
+				Default: false,
+			}, {
 				Name:     "concurrency",
 				Help:     "Maximum number of FTP simultaneous connections, 0 for unlimited",
 				Default:  0,
+				Advanced: true,
+			}, {
+				Name:     "no_check_certificate",
+				Help:     "Do not verify the TLS certificate of the server",
+				Default:  false,
 				Advanced: true,
 			},
 		},
@@ -58,11 +68,13 @@ func init() {
 
 // Options defines the configuration for this backend
 type Options struct {
-	Host        string `config:"host"`
-	User        string `config:"user"`
-	Pass        string `config:"pass"`
-	Port        string `config:"port"`
-	Concurrency int    `config:"concurrency"`
+	Host              string `config:"host"`
+	User              string `config:"user"`
+	Pass              string `config:"pass"`
+	Port              string `config:"port"`
+	TLS               bool   `config:"tls"`
+	Concurrency       int    `config:"concurrency"`
+	SkipVerifyTLSCert bool   `config:"no_check_certificate"`
 }
 
 // Fs represents a remote FTP server
@@ -120,7 +132,15 @@ func (f *Fs) Features() *fs.Features {
 // Open a new connection to the FTP server.
 func (f *Fs) ftpConnection() (*ftp.ServerConn, error) {
 	fs.Debugf(f, "Connecting to FTP server")
-	c, err := ftp.DialTimeout(f.dialAddr, fs.Config.ConnectTimeout)
+	ftpConfig := []ftp.DialOption{ftp.DialWithTimeout(fs.Config.ConnectTimeout)}
+	if f.opt.TLS {
+		tlsConfig := &tls.Config{
+			ServerName:         f.opt.Host,
+			InsecureSkipVerify: f.opt.SkipVerifyTLSCert,
+		}
+		ftpConfig = append(ftpConfig, ftp.DialWithTLS(tlsConfig))
+	}
+	c, err := ftp.Dial(f.dialAddr, ftpConfig...)
 	if err != nil {
 		fs.Errorf(f, "Error while Dialing %s: %s", f.dialAddr, err)
 		return nil, errors.Wrap(err, "ftpConnection Dial")
@@ -203,7 +223,11 @@ func NewFs(name, root string, m configmap.Mapper) (ff fs.Fs, err error) {
 	}
 
 	dialAddr := opt.Host + ":" + port
-	u := "ftp://" + path.Join(dialAddr+"/", root)
+	protocol := "ftp://"
+	if opt.TLS {
+		protocol = "ftps://"
+	}
+	u := protocol + path.Join(dialAddr+"/", root)
 	f := &Fs{
 		name:     name,
 		root:     root,
